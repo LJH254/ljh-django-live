@@ -1,0 +1,286 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="shortcut icon" href="{% static 'favicon.ico' %}" type="image/x-icon">
+    <title>聊天小程序 | Made by LJH</title>
+    <script src="{% static 'js/jquery-3.6.0.min.js' %}"></script>
+    <script>
+        // 侧边栏控制逻辑
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelector('.sidebar-toggle').addEventListener('click', function() {
+                document.querySelector('.sidebar').classList.toggle('active');
+            });
+        });
+
+        // 创建 WebSocket 连接
+        const socket = new WebSocket('ws://localhost:8765'); // 替换成你的 WebSocket 服务端 URL
+
+        // WebSocket 连接打开后
+        socket.onopen = function() {
+            console.log('WebSocket connection established');
+        };
+
+        // WebSocket 接收到消息时
+        socket.onmessage = function(event) {
+            const chatHistory = document.getElementById("chatHistory");
+            const MessageElement = document.createElement("div");
+            const msg = JSON.parse(event.data);
+            const csrfToken = "{{ csrfToken }}";
+
+            MessageElement.style.animation = "messagePop 0.3s ease-out";
+
+            // ---------------------------------
+            // 此处逻辑：
+            // 每个客户端的CSRF令牌都是不变且唯一的，因此可通过每个客户端的CSRF令牌进行标识。
+            // （此处解决一个bug）因为客户端初次进入时会默认全部显示别人的消息，
+            // 如果此客户端本来就发送过消息，会导致消息混淆。
+            // 因此添加判断。server代码已改动，server发送消息时，会发送一个JSON字符串，
+            // 大致格式如下：
+            // {'csrf_token': '客户端的CSRF令牌','msg': '消息'}
+            // 如果消息附带的令牌是自己的，则证明是自己发的，使用user-message样式。
+            // 否则证明消息是别人发的，使用bot-message样式。
+            // ---------------------------------
+
+            if (msg['csrf_token'] === csrfToken) {
+                MessageElement.classList.add("user-message");
+            }
+            else {
+                MessageElement.classList.add("bot-message");
+            }
+
+            MessageElement.textContent = msg['message'];  // 显示消息
+            chatHistory.appendChild(MessageElement);
+
+            // 滚动到最新消息
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        };
+
+        // 发送消息给服务器
+        function sendMessage() {
+            const message = document.getElementById("userMessage").value;
+            const csrfToken = "{{ csrfToken }}";  // 获取 CSRF Token
+
+            // 构造消息对象
+            const messageData = {
+                message: message,
+                csrfToken: csrfToken  // 添加 CSRF Token
+            };
+
+            // 发送消息到 WebSocket 服务端
+            socket.send(JSON.stringify(messageData));
+
+            // 显示用户发送的消息
+            const chatHistory = document.getElementById("chatHistory");
+            const userMessageElement = document.createElement("div");
+
+            userMessageElement.style.animation = "messagePop 0.3s ease-out";
+
+            userMessageElement.classList.add("user-message");
+            userMessageElement.textContent = message;  // 显示用户的消息
+            chatHistory.appendChild(userMessageElement);
+
+            // 滚动到最新消息
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+
+            // 清空输入框
+            document.getElementById("userMessage").value = '';
+        }
+
+        // 错误处理
+        socket.onerror = function(error) {
+            console.error('WebSocket Error: ', error);
+        };
+
+        // 连接关闭时
+        socket.onclose = function() {
+            console.log('WebSocket connection closed');
+        };
+    </script>
+
+    <style>
+        /* 使页面的 body 使用 Flexbox，确保聊天框居中 */
+        body, html {
+            height: 100%;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #f0f0f0;
+        }
+
+        /* 新增侧边栏样式 */
+        .sidebar {
+            position: fixed;
+            left: -250px;
+            top: 0;
+            width: 250px;
+            height: 100%;
+            background: #fff;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+            transition: left 0.3s;
+            z-index: 1000;
+            padding-top: 60px; /* 确保侧边栏内容不被折叠按钮挡住 */
+        }
+
+        .sidebar.active {
+            left: 0;
+        }
+
+        .sidebar-content {
+            padding: 20px;
+        }
+
+        .sidebar-link {
+            display: block;
+            padding: 12px 20px;
+            color: #333;
+            text-decoration: none;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+        }
+
+        .sidebar-link:hover {
+            background-color: #f0f0f0;
+        }
+
+        .sidebar-toggle {
+            position: fixed;
+            left: 10px;
+            top: 10px; /* 调整按钮的位置，向下偏移 */
+            z-index: 1001;
+            padding: 10px 15px;
+            background: #aabbbd;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 20px;
+        }
+
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            align-items: center;
+            width: 400px;
+            max-width: 500px;  /* 增加聊天框的最大宽度 */
+            height: 500px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 20px;
+            background-color: #f9f9f9;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .chat-history {
+            flex-grow: 1;
+            overflow-y: auto;
+            width: 100%;
+            margin-bottom: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .user-message, .bot-message {
+            display: inline-block;
+            max-width: 80%;
+            padding: 10px;
+            word-wrap: break-word;
+        }
+
+        .user-message {
+            text-align: right;
+            align-self: flex-end;
+        }
+
+        .bot-message {
+            text-align: left;
+            align-self: flex-start;
+        }
+
+        .user-message {
+            background: linear-gradient(135deg, #cce5ff, #cce5ff66);
+            border-radius: 15px 15px 0 15px;
+        }
+
+        .bot-message {
+            background: linear-gradient(135deg, #f0f0f0, #e2e3e5);
+            border-radius: 15px 15px 15px 0;
+        }
+
+        .system-message {
+            align-self: center;
+            background: rgba(0,0,0,0.1);
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+        }
+
+        @keyframes messagePop {
+            0% { transform: scale(0.8); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .input-container {
+            display: flex;
+            width: 100%;
+        }
+
+        .input-container input {
+            flex-grow: 1;
+            margin-right: 10px;
+            padding: 10px;
+            font-size: 14px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        .input-container button {
+            padding: 10px;
+            font-size: 14px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .input-container button:hover {
+            background-color: #45a049;
+        }
+
+        input {
+            width: 300px;
+        }
+    </style>
+</head>
+<body>
+    <!-- 新增侧边栏 -->
+    <div class="sidebar">
+        <div class="sidebar-content">
+            <a href="/envelope/" class="sidebar-link">抢红包</a>
+        </div>
+    </div>
+
+    <!-- 侧边栏开关按钮 -->
+    <button class="sidebar-toggle">≡</button>
+
+    <!-- 原有聊天容器保持不变 -->
+    <div class="chat-container">
+        <div class="chat-history" id="chatHistory">
+            <!-- 消息将显示在这里 -->
+        </div>
+        <form onsubmit="event.preventDefault(); sendMessage();">
+            {% csrf_token %}
+            <div class="input-container">
+                <input type="text" id="userMessage" placeholder="输入消息..." required>
+                <button type="submit">发送</button>
+            </div>
+        </form>
+    </div>
+</body>
+</html>

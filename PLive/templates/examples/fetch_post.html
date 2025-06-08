@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Ajax Fetch Post请求示例</title>
+    <script>
+        // 提交新任务（需处理 CSRF 令牌）
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.startsWith(name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        function post_request() {
+            // 发起 POST 请求
+            fetch('/ajax/post/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken'),    // 从 Cookie 中获取 CSRF 令牌
+                    'X-Requested-With': 'XMLHttpRequest'        // 标识 AJAX 请求
+                },
+                body: JSON.stringify({ title: '新任务' })    // 发送 JSON 数据
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log("创建成功:", data)
+                const span = document.getElementById('post_response')
+                span.textContent = JSON.stringify(data, null, 2);
+            })
+            .catch(error => console.error("错误:", error));
+        }
+    </script>
+</head>
+<body>
+    <button onclick="post_request()">发送请求</button>
+    <br><span id="post_response"></span>
+</body>
+</html>

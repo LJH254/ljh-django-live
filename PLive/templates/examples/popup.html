@@ -1,0 +1,72 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <title>弹窗示例</title>
+    <link rel="stylesheet" href="{% static 'plugins/bootstrap-3.4.1-dist/css/bootstrap.min.css' %}">
+    <!-- 自定义居中样式 -->
+    <style>
+        /* 垂直居中关键样式 */
+        .modal {
+            text-align: center;
+            padding: 0 !important;
+        }
+        .modal:before {
+            content: '';
+            display: inline-block;
+            height: 100%;
+            vertical-align: middle;
+            margin-right: -4px; /* 微调对齐 */
+        }
+        .modal-dialog {
+            display: inline-block;
+            text-align: left;
+            vertical-align: middle;
+        }
+
+        /* 响应式宽度设置 */
+        @media (min-width: 768px) {
+            .modal-dialog {
+                width: 600px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 触发按钮 -->
+    <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#myModal">打开弹窗</button>
+
+    <!-- 弹窗结构 -->
+    <div class="modal fade" id="myModal" tabindex="-1" role="dialog">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+                <h4 class="modal-title">操作确认</h4>
+                </div>
+                <div class="modal-body">
+                <p>您确定要执行此操作吗？</p>
+                </div>
+                <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">关闭</button>
+                <button type="button" class="btn btn-primary" id="btn-complete" data-dismiss="modal">完成</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{% static 'js/jquery-3.6.0.min.js' %}"></script>
+    <script src="{% static 'plugins/bootstrap-3.4.1-dist/js/bootstrap.min.js' %}"></script>
+
+    <script>
+        $(document).ready(function() {
+            $('#myModal').modal('show');
+            // 点击完成按钮时触发
+            $('#btn-complete').click(function() {
+            alert('操作已完成！');
+            // 可在此处添加业务逻辑（如提交表单等）
+            });
+        });
+    </script>
+</body>
+</html>
