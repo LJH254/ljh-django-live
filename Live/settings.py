@@ -96,8 +96,16 @@ DATABASES = {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': 'live_db',
         'USER': 'root',
-        'PASSWORD': 'root',
+        'PASSWORD': 'wqy071118',
         'HOST': 'localhost',
+        'PORT': 3306,
+    },
+    'envelope': {
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'envelope',
+        'USER': 'root',
+        'PASSWORD': 'wqy071118',
+        'HOST': '127.0.0.1',
         'PORT': 3306,
     }
 }
@@ -146,4 +154,6 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 CORS_ORIGIN_ALLOW_ALL = True
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOWED_ORIGINS = ['http://*','https://*']
+CORS_ALLOWED_ORIGINS = ['https://*']
+
+SHARED_SECRET_KEY = 'xb(yb)7-h68yl1o=&c-+3ad7j&@s+w$6cktf1b428rm16%!r=7'

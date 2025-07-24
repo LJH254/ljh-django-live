@@ -19,12 +19,5 @@ from django.urls import path, include
 from PLive import views
 
 urlpatterns = [
-    path('blur/', views.blur),
-    path('popup/', views.popup),
-    path('wss_example/', views.wss_example),
-    path('fetch_get/', views.fetch_get),
-    path('fetch_post/', views.fetch_post),
-    path('ajax/get/', views.ajax_get),
-    path('ajax/post/', views.ajax_post),
     path('', views.live),
 ]

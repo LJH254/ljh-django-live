@@ -2,17 +2,35 @@
 <!DOCTYPE html>
 <html lang="zh">
 <head>
-    <title>Django WebRTC</title>
+    <title>视频通话</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- Bootstrap 5 -->
     <link rel="stylesheet" href="{% static 'plugins/bootstrap-5.1.3-dist/css/bootstrap.css' %}">
-    <!-- Bootstrap Icons -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="{% static 'css/bootstrap-icons/font/bootstrap-icons.css' %}">
+    <link rel="stylesheet" href="{% static 'css/font_awesome/all.css' %}"/>
+    <link rel="stylesheet" href="{% static 'css/font_awesome/duotone-regular.css' %}"/>
+
+    <link rel="stylesheet" href="{% static 'css/utils/toast.css' %}"/>
+
+    <link rel="stylesheet" href="{% static 'css/main/live.css' %}"/>
 </head>
 <body class="bg-light">
     <div class="container py-4">
+        <div class="toast-container">
+            <div id="tipToast" style="animation: fadeIn 0.3s;border-radius: 12px;" class="toast align-items-center bg-white" role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="d-flex">
+                    <div class="toast-body" id="toast-body">
+                        <div id="toastIcon" style="margin-right: 6px;">
+                            <!-- 这里填充图标 -->
+                        </div>
+                        <div id="toastText">
+                            <!-- 这里填充提示 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="row g-3">
-            <!-- 设备选择 -->
             <div class="col-12">
                 <div class="card shadow-sm">
                     <div class="card-body">
@@ -30,12 +48,23 @@
                 </div>
             </div>
 
-            <!-- 视频区域 -->
             <div class="col-md-6">
                 <div class="card shadow-sm">
                     <div class="card-header bg-primary text-white">本地视频</div>
                     <div class="card-body p-2">
-                        <video id="localVideo" class="w-100" autoplay muted playsinline></video>
+                        <div class="video-container">
+                            <video id="localVideo" class="w-100" autoplay muted playsinline></video>
+                            <div class="devices-container">
+                                <div style="display: flex;">
+                                    <i class="fa-solid fa-video devices-icon" style="margin-right: -25px;z-index: 1;"></i>
+                                    <i id="local-cam-slash" class="fa-solid fa-slash devices-icon" style="margin-right: -25px;color: #ff0000;z-index: 2;display: none;"></i>
+                                </div>
+                                <div style="display: flex">
+                                    <i class="fa-solid fa-microphone devices-icon" style="margin-right: -20px;z-index: 1;"></i>
+                                    <i id="local-mic-slash" class="fa-solid fa-slash devices-icon" style="margin-right: -20px;color: #ff0000;z-index: 2;display: none;"></i>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -44,7 +73,19 @@
                 <div class="card shadow-sm">
                     <div class="card-header bg-success text-white">远程视频</div>
                     <div class="card-body p-2">
-                        <video id="remoteVideo" class="w-100" autoplay playsinline></video>
+                        <div id="remote-video-container" class="video-container" style="visibility: hidden;">
+                            <video id="remoteVideo" class="w-100" autoplay playsinline></video>
+                            <div class="devices-container">
+                                <div style="display: flex;">
+                                    <i class="fa-solid fa-video devices-icon" style="margin-right: -25px;z-index: 1;"></i>
+                                    <i id="remote-cam-slash" class="fa-solid fa-slash devices-icon" style="margin-right: -25px;color: #ff0000;z-index: 2;display: none;"></i>
+                                </div>
+                                <div style="display: flex">
+                                    <i class="fa-solid fa-microphone devices-icon" style="margin-right: -20px;z-index: 1;"></i>
+                                    <i id="remote-mic-slash" class="fa-solid fa-slash devices-icon" style="margin-right: -20px;color: #ff0000;z-index: 2;display: none;"></i>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -52,9 +93,6 @@
             <!-- 控制按钮 -->
             <div class="col-12">
                 <div class="d-flex gap-2 justify-content-center flex-wrap">
-                    <button id="startCall" class="btn btn-primary btn-lg">
-                        <i class="bi bi-telephone"></i> 发起通话
-                    </button>
                     <button id="toggleMic" class="btn btn-secondary btn-lg" disabled>
                         <i class="bi bi-mic"></i> 禁用麦克风
                     </button>
@@ -67,236 +105,73 @@
                 </div>
             </div>
         </div>
+
+        <div class="modal fade" id="waitModal" tabindex="-1" aria-labelledby="waitTitleLabel" aria-hidden="true" data-bs-backdrop="static">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content" style="box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="waitTitleLabel">正在呼叫...</h5>
+                    </div>
+                    <div class="modal-body" style="padding: 1.1rem;">
+                        <div class="caller-info">
+                            <div class="position-relative">
+                                <div class="avatar">
+                                    <i class="fas fa-user"></i>
+                                </div>
+                                <div class="pulse-ring"></div>
+                                <div class="pulse-ring"></div>
+                                <div class="pulse-ring"></div>
+                            </div>
+                            <div id="callee-name" class="callee-name"></div>
+                            <div id="call-status" class="call-status">正在等待对方接听</div>
+                            <div class="timer">00:00</div>
+                        </div>
+
+                        <div class="loading-dots">
+                            <div class="dot"></div>
+                            <div class="dot"></div>
+                            <div class="dot"></div>
+                        </div>
+
+                        <div class="action-buttons">
+                            <button id="btn-end" class="btn btn-end btn-call" data-bs-dismiss="modal">
+                                <i class="fa-solid fa-phone-hangup"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="endModal" tabindex="-1" style="color: #000;" aria-labelledby="endTitleLabel" aria-hidden="true" data-bs-backdrop="static">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content" style="box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="endTitleLabel" style="margin-left: 8px;font-size: 1rem;">通话结束</h5>
+                    </div>
+                    <div class="modal-body" style="padding: 1.1rem;">
+                        <p>通话已结束！</p>
+                    </div>
+                    <div class="modal-footer">
+                        <a class="btn btn-primary" role="button" href="https://ljhchat.top/chat/">返回首页</a>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <!-- Bootstrap JS -->
     <script src="{% static 'plugins/bootstrap-5.1.3-dist/js/bootstrap.bundle.min.js' %}"></script>
 
     <script>
-        const roomName = 'default_room';
-        const ws = new WebSocket(`wss://${window.location.host}/ws/signaling/${roomName}/`);
-
-        let pc = null;
-        let localStream = null;
-        let isNegotiating = false;
-        let mediaConstraints = { video: true, audio: true };
-        const videoSelect = document.getElementById('videoSelect');
-        const audioSelect = document.getElementById('audioSelect');
-
-        // 设备枚举
-        let mediaDevices = [];
-        async function enumerateDevices() {
-            mediaDevices = await navigator.mediaDevices.enumerateDevices();
-
-            // 填充视频设备
-            videoSelect.innerHTML = mediaDevices
-                .filter(d => d.kind === 'videoinput')
-                .map(d => `<option value="${d.deviceId}">${d.label || '摄像头'}</option>`)
-                .join('');
-
-            // 填充音频设备
-            audioSelect.innerHTML = mediaDevices
-                .filter(d => d.kind === 'audioinput')
-                .map(d => `<option value="${d.deviceId}">${d.label || '麦克风'}</option>`)
-                .join('');
-        }
-
-        // 获取媒体流
-        async function getLocalStream() {
-            const videoSource = videoSelect.value;
-            const audioSource = audioSelect.value;
-
-            const constraints = {
-                video: { deviceId: videoSource ? { exact: videoSource } : true },
-                audio: { deviceId: audioSource ? { exact: audioSource } : true }
-            };
-
-            try {
-                if (localStream) {
-                    localStream.getTracks().forEach(track => track.stop());
-                }
-
-                localStream = await navigator.mediaDevices.getUserMedia(constraints);
-                document.getElementById('localVideo').srcObject = localStream;
-
-                // 初始化媒体控制按钮
-                const micButton = document.getElementById('toggleMic');
-                const camButton = document.getElementById('toggleCam');
-                const audioTrack = localStream.getAudioTracks()[0];
-                const videoTrack = localStream.getVideoTracks()[0];
-
-                // 麦克风按钮状态
-                if (audioTrack) {
-                    micButton.disabled = false;
-                    micButton.innerHTML = audioTrack.enabled ?
-                        '<i class="bi bi-mic-mute"></i> 禁用麦克风' :
-                        '<i class="bi bi-mic"></i> 启用麦克风';
-                } else {
-                    micButton.disabled = true;
-                }
-
-                // 摄像头按钮状态
-                if (videoTrack) {
-                    camButton.disabled = false;
-                    camButton.innerHTML = videoTrack.enabled ?
-                        '<i class="bi bi-camera-video-off"></i> 禁用摄像头' :
-                        '<i class="bi bi-camera-video"></i> 启用摄像头';
-                } else {
-                    camButton.disabled = true;
-                }
-            } catch (err) {
-                console.error("获取媒体设备失败:", err);
-            }
-        }
-
-        // 切换麦克风状态
-        document.getElementById('toggleMic').addEventListener('click', () => {
-            const audioTracks = localStream.getAudioTracks();
-            if (audioTracks.length > 0) {
-                const track = audioTracks[0];
-                track.enabled = !track.enabled;
-                const button = document.getElementById('toggleMic');
-                button.innerHTML = track.enabled ?
-                    '<i class="bi bi-mic-mute"></i> 禁用麦克风' :
-                    '<i class="bi bi-mic"></i> 启用麦克风';
-            }
-        });
-
-        // 切换摄像头状态
-        document.getElementById('toggleCam').addEventListener('click', () => {
-            const videoTracks = localStream.getVideoTracks();
-            if (videoTracks.length > 0) {
-                const track = videoTracks[0];
-                track.enabled = !track.enabled;
-                const button = document.getElementById('toggleCam');
-                button.innerHTML = track.enabled ?
-                    '<i class="bi bi-camera-video-off"></i> 禁用摄像头' :
-                    '<i class="bi bi-camera-video"></i> 启用摄像头';
-            }
-        });
-
-        // 初始化
-        async function init() {
-            await enumerateDevices();
-            await getLocalStream();
-
-            // 监听设备变化
-            navigator.mediaDevices.addEventListener('devicechange', enumerateDevices);
-
-            // 设备选择变化时重新获取流
-            videoSelect.addEventListener('change', getLocalStream);
-            audioSelect.addEventListener('change', getLocalStream);
-        }
-
-        // 创建Peer Connection（保持原有逻辑）
-        function createPeerConnection() {
-            // 清理旧连接
-            if (pc) {
-                pc.close();
-                pc = null;
-            }
-
-            const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-            pc = new RTCPeerConnection(config);
-
-            // 添加本地轨道（保持固定顺序：先audio后video）
-            const audioTrack = localStream.getAudioTracks()[0];
-            const videoTrack = localStream.getVideoTracks()[0];
-            if (audioTrack) pc.addTrack(audioTrack, localStream);
-            if (videoTrack) pc.addTrack(videoTrack, localStream);
-
-            // 自动处理协商
-            pc.onnegotiationneeded = async () => {
-                if (isNegotiating) return;
-                isNegotiating = true;
-                try {
-                    const offer = await pc.createOffer();
-                    await pc.setLocalDescription(offer);
-                    ws.send(JSON.stringify({
-                        type: 'offer',
-                        sdp: offer.sdp
-                    }));
-                } catch (err) {
-                    console.error("协商失败:", err);
-                } finally {
-                    isNegotiating = false;
-                }
-            };
-
-            pc.ontrack = (e) => {
-                if (!document.getElementById('remoteVideo').srcObject) {
-                    document.getElementById('remoteVideo').srcObject = e.streams[0];
-                }
-            };
-
-            pc.onicecandidate = (e) => {
-                if (e.candidate) {
-                    ws.send(JSON.stringify({
-                        type: 'ice-candidate',
-                        candidate: e.candidate
-                    }));
-                }
-            };
-        }
-
-        // 控制按钮状态
-        function updateButtonState(connected) {
-            document.getElementById('startCall').disabled = connected;
-            document.getElementById('hangup').disabled = !connected;
-        }
-
-        // 发起通话
-        document.getElementById('startCall').onclick = () => {
-            if (!pc) createPeerConnection();
-            updateButtonState(true);
-        };
-
-        // 挂断处理
-        document.getElementById('hangup').onclick = () => {
-            if (pc) {
-                pc.close();
-                pc = null;
-            }
-            updateButtonState(false);
-        };
-
-        // WebSocket消息处理（保持原有逻辑）
-        ws.onmessage = async (e) => {
-            const data = JSON.parse(e.data);
-            try {
-                switch(data.type) {
-                    case 'offer':
-                        if (pc) pc.close(); // 清理旧连接
-                        createPeerConnection();
-                        await pc.setRemoteDescription(new RTCSessionDescription(data));
-                        const answer = await pc.createAnswer();
-                        await pc.setLocalDescription(answer);
-                        ws.send(JSON.stringify({
-                            type: 'answer',
-                            sdp: answer.sdp
-                        }));
-                        break;
-                    case 'answer':
-                        if (!pc) return;
-                        await pc.setRemoteDescription(new RTCSessionDescription(data));
-                        break;
-                    case 'ice-candidate':
-                        if (pc && pc.remoteDescription) {
-                            await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-                        }
-                        break;
-                }
-            } catch (err) {
-                console.error("信令处理错误:", err);
-            }
-        };
-
-        // 初始化执行
-        if (typeof navigator.mediaDevices === 'undefined') {
-            window.location.replace("https://ljhlive.mynatapp.cc");
-        } else {
-            init();
-        }
+        const role = "{{ role }}";
+        const room_uuid = "{{ room_uuid }}";
+        const csrftoken = "{{ csrftoken }}";
+        const ws_csrftoken = "{{ ws_csrftoken }}";
+        const ws_token = "{{ ws_token }}";
+        const caller_name = "{{ caller_name }}";
+        const callee_name = "{{ callee_name }}";
     </script>
+
+    <script src="{% static 'js/main/live.js' %}"></script>
 </body>
 </html>

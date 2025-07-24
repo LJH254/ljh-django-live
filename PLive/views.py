@@ -1,51 +1,67 @@
-from django.shortcuts import render, redirect
+from django.shortcuts import render, HttpResponse
 from django.http import JsonResponse
-from django.views.decorators.http import require_http_methods
-import json
+from PLive.models import ChatCalls
+from django.conf import settings
+import jwt
+import time
 
-# ------------------------- Example -------------------------
-
-# GET 请求示例：返回任务列表
-@require_http_methods(["GET"])
-def ajax_get(request):
-    tasks = ['a','b','c','d','e','f']
-    return JsonResponse(tasks, safe=False)  # 转为 JSON 响应
-
-
-# POST 请求示例：接收 JSON 数据并创建任务
-@require_http_methods(["POST"])
-def ajax_post(request):
-    try:
-        # 解析前端发送的 JSON 数据
-        data = json.loads(request.body)
-        title = data.get('title')
-        return JsonResponse({'id': 1, 'title': title}, status=201)
-
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=400)
-
-
-def blur(request):
-    return render(request, 'examples/blur.html')
-
-def popup(request):
-    return render(request, 'examples/popup.html')
-
-def wss_example(request):
-    try:
-        csrfToken = request.COOKIES['csrftoken']
-    except KeyError as ke:  # 有时候cookies中不会夹带csrftoken键，很奇怪。此时强制刷新即可。
-        print(ke)
-        return redirect('/wss_example/')
-    return render(request, 'examples/wsstest.html', {'csrfToken':csrfToken})
-
-def fetch_get(request):
-    return render(request, 'examples/fetch_get.html')
-
-def fetch_post(request):
-    return render(request, 'examples/fetch_post.html')
-
-# ------------------------- Example -------------------------
 
 def live(request):
-    return render(request, 'live.html')
+    token = request.GET.get('token')
+
+    if not token:
+        return JsonResponse({'error': 'Token is missing'}, status=400)
+
+    try:
+        data = jwt.decode(token, settings.SHARED_SECRET_KEY, algorithms=["HS256"])
+
+        from_csrftoken = data['from_csrftoken']
+        to_csrftoken = data['to_csrftoken']
+        session_uuid = data['session_uuid']
+        caller_name = data['caller_name']
+        callee_name = data['callee_name']
+        role = data['role']
+
+        if not ChatCalls.objects.using('envelope').filter(session_uuid=session_uuid).exists():
+            return HttpResponse("UUID错误或无效！")
+
+        if role == 'caller':
+            if not ChatCalls.objects.using('envelope').filter(from_csrftoken=from_csrftoken).exists():
+                return HttpResponse("角色错误或您是非法用户！")
+            csrftoken = from_csrftoken
+            ws_csrftoken = to_csrftoken
+        elif role == 'callee':
+            if not ChatCalls.objects.using('envelope').filter(to_csrftoken=to_csrftoken).exists():
+                return HttpResponse("角色错误或您是非法用户！")
+            csrftoken = to_csrftoken
+            ws_csrftoken = from_csrftoken
+        else:
+            return HttpResponse("无效角色！")
+
+        info = {
+            'from_csrftoken': from_csrftoken,
+            'to_csrftoken': to_csrftoken,
+            'session_uuid': session_uuid,
+            'caller_name': caller_name,
+            'callee_name': callee_name,
+            'role': 'callee',
+            'exp': int(time.time()) + 60 * 5
+        }
+
+        ws_token = jwt.encode(info, settings.SHARED_SECRET_KEY, algorithm="HS256")
+
+        print(from_csrftoken, to_csrftoken)
+        return render(request, 'live.html', {
+            'role': role,
+            'room_uuid': session_uuid,
+            'csrftoken': csrftoken,
+            'caller_name': caller_name,
+            'callee_name': callee_name,
+            'ws_csrftoken': ws_csrftoken,
+            'ws_token': ws_token
+        })
+
+    except jwt.ExpiredSignatureError:
+        return HttpResponse("Token已过期")
+    except jwt.InvalidTokenError:
+        return HttpResponse("无效token")
