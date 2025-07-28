@@ -27,7 +27,11 @@ async function getLocalStream() {
     const audioSource = audioSelect.value;
 
     const constraints = {
-        video: { deviceId: videoSource ? { exact: videoSource } : true },
+        video: {
+            deviceId: videoSource ? { exact: videoSource } : true,
+            width: 540,
+            height: 580
+        },
         audio: { deviceId: audioSource ? { exact: audioSource } : true }
     };
 
@@ -78,87 +82,57 @@ async function init() {
 
 function createPeerConnection() {
     if (pc) {
-        pc.close();
+        pc.destroy();
         pc = null;
     }
 
     const config = {
         iceServers: [
             {
+                urls: 'stun:106.53.106.131:3480'
+            },
+            {
                 urls: 'turn:106.53.106.131:3480',
                 username: 'ljh',
                 credential: '65536'
-            },
-            {
-                urls: 'stun:stun.l.google.com:19302'
             }
         ]
     };
-    pc = new RTCPeerConnection(config);
+    pc = new SimplePeer({
+        initiator: isCaller,
+        trickle: false,
+        stream: localStream,
+        config: config
+    });
 
-    const audioTrack = localStream.getAudioTracks()[0];
-    const videoTrack = localStream.getVideoTracks()[0];
-    if (audioTrack) pc.addTrack(audioTrack, localStream);
-    if (videoTrack) pc.addTrack(videoTrack, localStream);
+    pc.on('signal', data => {
+        console.log('Sending signal:', data);
+        ws_signal.send(JSON.stringify(data));
+    });
 
-    pc.onnegotiationneeded = async () => {
-        if (isNegotiating) return;
-        isNegotiating = true;
-        try {
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-            ws_signal.send(JSON.stringify({
-                type: 'offer',
-                sdp: offer.sdp
-            }));
-        } catch (err) {
-            console.error("协商失败:", err);
-        } finally {
-            isNegotiating = false;
-        }
-    };
-
-    pc.ontrack = (e) => {
+    pc.on('stream', e => {
         if (!rv.srcObject) {
-            rv.srcObject = e.streams[0];
-            console.log(e.streams[0]);
+            rv.srcObject = e;
+            console.log(e);
         }
-    };
+    });
 
-    pc.onconnectionstatechange = () => {
-        switch (pc.connectionState) {
-            case "connected":
-                console.log('Connected successfully!');
-                updateButtonState(true);
+    pc.on('connect', () => {
+        console.log('Connected successfully!');
+        updateButtonState(true);
 
-                showToast(
-                    '<i class="fa-solid fa-circle-check fa-lg" style="color: green;"></i>',
-                    '连接成功！',
-                    true
-                );
+        showToast(
+            '<i class="fa-solid fa-circle-check fa-lg" style="color: green;"></i>',
+            '连接成功！',
+            true
+        );
 
-                document.getElementById('remote-video-container').style.visibility = '';
-                break;
-            case "disconnected":
-                console.log('Connection closed');
-                if (pc) {
-                    pc.close();
-                    pc = null;
-                }
-                rv.srcObject = null;
-                updateButtonState(false);
-                break;
-        }
-    };
+        document.getElementById('remote-video-container').style.visibility = '';
+    });
 
-    pc.onicecandidate = (e) => {
-        if (e.candidate) {
-            ws_signal.send(JSON.stringify({
-                type: 'ice-candidate',
-                candidate: e.candidate
-            }));
-        }
-    };
+    pc.on('error', err => {
+        console.error('Peer error:', err);
+    });
 }
 
 function startCall() {
@@ -180,7 +154,7 @@ function startCall() {
 
 function hangup() {
     if (pc) {
-        pc.close();
+        pc.destroy();
         pc = null;
     }
     rv.srcObject = null;
@@ -196,33 +170,35 @@ function updateButtonState(connected) {
 }
 
 function timer() {
-    let seconds = 0;
     const timerElement = document.querySelector('.timer');
     const statusElement = document.getElementById('call-status');
 
-    function updateTimer() {
-        if (seconds >= 300) {
-            WaitModal.hide();
-            showToast('<i class="fa-solid fa-circle-xmark fa-lg" style="color: red;"></i>', '对方长时间未接听，已挂断', true);
-            EndModal.show();
+    async function updateTimer() {
+        for (let seconds = 1; seconds <= 300; seconds++) {
+            const minutes = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            timerElement.textContent = `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            statusElement.textContent = `正在等待对方接听${'.'.repeat(seconds % 4)}`;
+            await new Promise(resolve => setTimeout(resolve, 1000));
 
-            ws_call.send(JSON.stringify({
-                token: ws_token,
-                caller_name: caller_name,
-                csrftoken: ws_csrftoken,
-                from: csrftoken,
-                role: 'user',
-                state: false
-            }));
+            if (onCall) return;
         }
-        seconds++;
-        const minutes = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        timerElement.textContent = `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-        statusElement.textContent = `正在等待对方接听${'.'.repeat(seconds % 4)}`;
+
+        WaitModal.hide();
+        showToast('<i class="fa-solid fa-circle-xmark fa-lg" style="color: red;"></i>', '对方长时间未接听，已挂断', true);
+        EndModal.show();
+
+        ws_call.send(JSON.stringify({
+            token: ws_token,
+            caller_name: caller_name,
+            csrftoken: ws_csrftoken,
+            from: csrftoken,
+            role: 'user',
+            state: false
+        }));
     }
 
-    setInterval(updateTimer, 1000);
+    updateTimer();
 
     document.getElementById('btn-end').addEventListener('click', function() {
         ws_call.send(JSON.stringify({
@@ -256,8 +232,20 @@ let TipToast_el;
 let TipToast;
 
 let onCall = false;
+let isCaller = (role === 'caller');
 
 let mediaDevices = [];
+
+document.addEventListener('DOMContentLoaded', function () {
+    let _tt = document.getElementById('tipToast');
+    _tt.addEventListener('show.bs.toast', function() {
+        _tt.style.animation = 'fadeIn 0.3s';
+    });
+
+    _tt.addEventListener('hide.bs.toast', function() {
+        _tt.style.animation = 'fadeOut 0.3s';
+    });
+});
 
 document.addEventListener('DOMContentLoaded', async function () {
     WaitModal = new bootstrap.Modal(document.getElementById('waitModal'));
@@ -290,32 +278,14 @@ document.addEventListener('DOMContentLoaded', async function () {
     });
 
     ws_signal.onmessage = async (e) => {
-        const data = JSON.parse(e.data);
         try {
-            switch(data.type) {
-                case 'offer':
-                    if (pc) pc.close();
-                    createPeerConnection();
-                    await pc.setRemoteDescription(new RTCSessionDescription(data));
-                    const answer = await pc.createAnswer();
-                    await pc.setLocalDescription(answer);
-                    ws_signal.send(JSON.stringify({
-                        type: 'answer',
-                        sdp: answer.sdp
-                    }));
-                    break;
-                case 'answer':
-                    if (!pc) return;
-                    await pc.setRemoteDescription(new RTCSessionDescription(data));
-                    break;
-                case 'ice-candidate':
-                    if (pc && pc.remoteDescription) {
-                        await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-                    }
-                    break;
-            }
+            if (!pc) createPeerConnection();
+
+            const data = JSON.parse(e.data);
+            console.log('Received signal:', data);
+            pc.signal(data);
         } catch (err) {
-            console.error("信令处理错误:", err);
+            console.error('信令解析错误:', err);
         }
     };
 
@@ -341,7 +311,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     ws_call.onopen = () => {
-        if (role === 'caller') {
+        if (isCaller) {
             WaitModal.show();
             document.getElementById('callee-name').textContent = callee_name;
             timer();
@@ -355,7 +325,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 role: 'user',
                 state: true
             }))
-        } else if (role === 'callee') {
+        } else {
             ws_call.send(JSON.stringify({
                 token: ws_token,
                 caller_name: caller_name,
@@ -369,6 +339,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     ws_call.onmessage = async (e) => {
         const data = JSON.parse(e.data);
+        console.log(data)
         if (data.from === ws_csrftoken) {
             if (data.state) {
                 WaitModal.hide();
@@ -425,5 +396,9 @@ document.addEventListener('DOMContentLoaded', async function () {
                 }));
             }
         }
+    });
+
+    window.addEventListener('beforeunload', () => {
+        hangup();
     });
 });
